@@ -55,13 +55,14 @@ func (p *Packet) DataLen() []byte {
 
 // Sender class.
 type Sender struct {
-	Host string
-	Port int
+	Host  string
+	Port  int
+	Debug bool
 }
 
 // Sender class constructor.
-func NewSender(host string, port int) *Sender {
-	s := &Sender{Host: host, Port: port}
+func NewSender(host string, port int, debug bool) *Sender {
+	s := &Sender{Host: host, Port: port, Debug: debug}
 	return s
 }
 
@@ -144,11 +145,11 @@ func (s *Sender) Send(packet *Packet) (res []byte, err error) {
 
 	dataPacket, _ := json.Marshal(packet)
 
-	/*
-	   fmt.Printf("HEADER: % x (%s)\n", s.getHeader(), s.getHeader())
-	   fmt.Printf("DATALEN: % x, %d byte\n", packet.DataLen(), len(packet.DataLen()))
-	   fmt.Printf("BODY: %s\n", string(dataPacket))
-	*/
+	if s.Debug {
+		fmt.Printf("HEADER: % x (%s)\n", s.getHeader(), s.getHeader())
+		fmt.Printf("DATALEN: % x, %d byte\n", packet.DataLen(), len(packet.DataLen()))
+		fmt.Printf("BODY: %s\n", string(dataPacket))
+	}
 
 	// Fill buffer
 	buffer := append(s.getHeader(), packet.DataLen()...)
@@ -163,8 +164,74 @@ func (s *Sender) Send(packet *Packet) (res []byte, err error) {
 
 	res, err = s.read(conn)
 
-	/*
-	   fmt.Printf("RESPONSE: %s\n", string(res))
-	*/
+	if s.Debug {
+		fmt.Printf("RESPONSE: %s\n", string(res))
+	}
+
 	return
+}
+
+// Send discover data to Zabbix
+func SendLLD(zabbixTargetHost string, zabbixProxy string, key string, data []interface{}, desc string, debug bool) {
+	mstr := objToJsonStr(data)
+	mstr = "{\"data\":" + mstr + "}"
+	var slld []*Metric
+	lld := NewMetric(zabbixTargetHost, key, mstr, time.Now().Unix())
+	slld = append(slld, lld)
+
+	if debug {
+		fmt.Println("DEBUG Discover:")
+		for _, v := range slld {
+			fmt.Printf("Host: %s\n", v.Host)
+			fmt.Printf("Key: %s\n", v.Key)
+			fmt.Printf("Data: %s\n", v.Value)
+		}
+	}
+
+	packet := NewPacket(slld, time.Now().Unix())
+
+	z := NewSender(zabbixProxy, 10051, debug)
+	resp, err := z.Send(packet)
+
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		resp = resp[6:]
+		fmt.Println(desc + string(resp))
+	}
+}
+
+// Send Metrics with trapper to Zabix
+func SendMetrics(zabbixProxy string, ml []*Metric, desc string, debug bool) {
+	if debug {
+		fmt.Println(desc + " Metrics:")
+		for _, v := range ml {
+			fmt.Printf("Host: %s\n", v.Host)
+			fmt.Printf("Key: %s\n", v.Key)
+			fmt.Printf("Data: %s\n", v.Value)
+		}
+	}
+
+	packet := NewPacket(ml, time.Now().Unix())
+
+	z := NewSender(zabbixProxy, 10051, debug)
+	resp, err := z.Send(packet)
+
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		resp = resp[6:]
+		fmt.Println(desc + string(resp))
+	}
+}
+
+func objToJsonStr(obj interface{}) string {
+	var jsonData []byte
+	jsonData, err := json.Marshal(obj)
+
+	if err != nil {
+		fmt.Println("error")
+		return ""
+	}
+	return string(jsonData)
 }
