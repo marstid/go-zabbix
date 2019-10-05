@@ -35,7 +35,7 @@ type Packet struct {
 	Clock   int64     `json:"clock"`
 }
 
-// Packet class cunstructor.
+// Packet class constructor.
 func NewPacket(data []*Metric, clock ...int64) *Packet {
 	p := &Packet{Request: `sender data`, Data: data}
 	// use current time, if `clock` is not specified
